@@ -24,10 +24,10 @@ def register():
         return jsonify({"error": "Invalid data provided"}), 400
     try:
         response = client_service.clientRegister(username,email,password,first_name,last_name,tkns_remaining )
-        if response:
+        if response is not None:
             return jsonify("Success ",response.to_json()), 201
         else:
-            return jsonify({"error": "User already exists"}), 400
+            return jsonify({"error": "Username already exists"}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -35,10 +35,10 @@ def register():
 def get_user(username):
     try:
         response = client_service.returnClient(username)
-        if response:
-            return jsonify(response.to_json()), 200
-        else:
+        if response is None:
             return jsonify({"error": "User not found"}), 404
+        else:
+            return jsonify(response.to_json()), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
@@ -46,10 +46,10 @@ def get_user(username):
 def get_token(username):
     try:
         response = client_service.returnTokenInfo(username )
-        if response:
-            return jsonify(response), 200
-        else:
+        if response is None:
             return jsonify({"error": "User not found"}), 404
+        else:
+            return jsonify(response), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
@@ -59,15 +59,13 @@ def update_token():
         data = request.json
         username = data.get('username')
         add_tkn = data.get('add_tkn')
-
         if not username or add_tkn is None :
             return jsonify({"error": "Invalid input data"}), 400
         response = client_service.updateClientToken(username, add_tkn)
-        if response:
-            return jsonify({"success": "Token update success"}), 200        
+        if response is None:
+            return jsonify({"error": "User not found"}), 404                   
         else:
-            return jsonify({"error": "User not found"}), 404
-    
+            return jsonify({"success": "Token update success"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -79,10 +77,10 @@ def delete_client():
         if clientId is None:
             return jsonify({"error": "Invalid input data"}), 400
         response = client_service.deleteClient(clientId)
-        if response:
-            return jsonify({"success": "client deletion success"}), 200
-        else:
+        if response is None:
             return jsonify({"error": "User not found"}), 404
+        else:
+            return jsonify({"success": "client deletion success"}), 200 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     

@@ -53,45 +53,23 @@ def register_socketio_handlers(socketio):
 
 @openai_blueprint.route('/convo', methods=['POST'])
 def convo():
-    if request.method == "POST":
-        clientId = request.json.get('client_id')
-        message = request.json.get('message')
+    try:
+        if request.method == "POST":
+            clientId = request.json.get('client_id')
+            message = request.json.get('message')
 
-        if not clientId or message is None:
-         return jsonify({"error": "Invalid input data"}), 400
-
-        client = Client.objects(id=clientId).first()
-
-        if not client:
-            return jsonify({"error": "Client not found"}), 404
-        
-        if  (len(message) >= client.tkns_remaining ) :
-            return jsonify({"error": "Token limit exceeded"}), 402
-        
-        if message:
-            openai_tkn = current_app.config['OPENAI_API_TOKEN']
-            assistant_id = current_app.config['ASSISTANT_ID']
-      
-            response = openai_service.connectAi(openai_tkn, message, assistant_id)
-            if response:
-                tkns_used = response["request_tokens"] + response["reply_tokens"]
-                print("total tkns used ",tkns_used)
-                if client.tkns_remaining < tkns_used :
-                    client.tkns_used += client.tkns_remaining
-                    client.tkns_remaining = 0
-                    client.save()
-                    return jsonify({"error": "Token limit reached"}), 402
+            if not clientId or message is None:
+                return jsonify({"error": "Invalid input data"}), 400
+            if message:
+                response = openai_service.connectAi(message, clientId)
+                if response.get("error"):
+                    return jsonify({"error": response["error"]}), 402       
                 else:
-                    client.tkns_used += tkns_used
-                    client.tkns_remaining -= tkns_used
-                    client.save()
-                    return jsonify(response), 200
-            else:
-                jsonify({"error": "Error fetching response"}), 500
+                    return jsonify(response), 200        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+    
 
-        return "Invalid input data", 400
-
-# @openai_blueprint.route('/tkns/check', methods=['GET'])
-# def get_tkns():
    
 

@@ -5,17 +5,22 @@ class Client(Document):
     meta = {'collection': 'clients'}  # Collection name in MongoDB
 
     username = StringField(required=True, unique=True, max_length=50)
-    email = EmailField(required=True, unique=True)
+    email = EmailField(required=True)
     password = StringField(required=True)
     first_name = StringField(max_length=50)
     last_name = StringField(max_length=50)
     tkns_remaining = IntField(default=0)
     tkns_used = IntField(default=0)
     is_active = BooleanField(default=True) 
+    # version = IntField(default=0) 
     created_at = DateTimeField(default=datetime.datetime.utcnow)
 
     def __str__(self):
         return f"<Client {self.username}>"
+    
+    # def save(self, *args, **kwargs):
+    #     self.version += 1
+    #     super(Client, self).save(*args, **kwargs)
 
     def to_json(self):
         return {

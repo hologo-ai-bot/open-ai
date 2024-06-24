@@ -1,8 +1,17 @@
 import requests
 import time
 import tiktoken
+from flask import current_app
+from main.models.client import Client
 
 class OpenAIService:
+
+    def updateTokenUsage(self, clientId, tkns_used):
+        client = Client.objects.get(id=clientId)
+        client.tkns_used += tkns_used
+        client.tkns_remaining -= tkns_used
+        client.save()
+
     def createThread(self, apiToken):
         url = 'https://api.openai.com/v1/threads'
         headers = {
@@ -15,7 +24,7 @@ class OpenAIService:
         print('response: ', response.json())
         return response.json()['id']
 
-    def sendMessageThread(self, apiToken, threadID, message):
+    def sendMessageThread(self, apiToken, threadID, message, clientId):
         url = f'https://api.openai.com/v1/threads/{threadID}/messages'
         headers = {
             'Content-Type': 'application/json',
@@ -28,7 +37,8 @@ class OpenAIService:
             "content": message
         }
 
-        num_tokens = self.num_tokens_from_messages([data])
+        num_tokens = self.getTokenCount([data])
+        self.updateTokenUsage(clientId,num_tokens)
         print(f"No. of tokens in request: {num_tokens}")
 
         response = requests.post(url, headers=headers, json=data)
@@ -57,7 +67,7 @@ class OpenAIService:
         response = requests.get(url, headers=headers)
         return response.json()['status']
 
-    def retriveMessage(self, apiToken, threadID):
+    def retriveMessage(self, apiToken, threadID, clientId):
         url = f'https://api.openai.com/v1/threads/{threadID}/messages'
         headers = {
             'Content-Type': 'application/json',
@@ -67,17 +77,33 @@ class OpenAIService:
         response = requests.get(url, headers=headers)
         # print("response", response.json())
         reply_data = response.json()['data'][0]['content'][0]['text']['value']
-        reply_tokens = self.num_tokens_from_messages([{"role": "assistant", "content": reply_data}])
+        reply_tokens = self.getTokenCount([{"role": "assistant", "content": reply_data}])
+        self.updateTokenUsage(clientId, reply_tokens)
         print(f"No. of tokens in reply: {reply_tokens}")
         return reply_data, reply_tokens
 
         # return response.json()['data'][0]['content'][0]['text']['value']
 
-    def connectAi(self, apiToken, message, assistant_ID):
+    def connectAi(self,  message, clientId):
+        apiToken = current_app.config['OPENAI_API_TOKEN']
+        assistant_ID = current_app.config['ASSISTANT_ID']
+        client = Client.objects.get(id=clientId)
+        remaining_tkns = self.checkRemainingTokens(clientId)
+        msg_tkn = self.getTokenCount([ {
+            "role": "user",
+            "content": message
+        }])
+
+        if not client:
+            return {"error":"Unauthorized access"}
+
+        if (msg_tkn >= remaining_tkns) or (remaining_tkns < 20) :
+            return {"error":"Token limit exceeded"}
+        
+        # initial_version = client.version
         threadID = self.createThread(apiToken)
         if threadID:
-            _, request_tokens = self.sendMessageThread(apiToken, threadID, message)
-
+            _, request_tokens = self.sendMessageThread(apiToken, threadID, message, clientId)
             runID = self.runThread(apiToken, threadID, assistant_ID)
             if runID:
                 status = ''
@@ -86,16 +112,23 @@ class OpenAIService:
                     time.sleep(5)
                     status = self.checkRunStatus(apiToken, threadID, runID)
                 if status == "completed":
-                    final_message, reply_tokens = self.retriveMessage(apiToken, threadID)
+                    final_message, reply_tokens = self.retriveMessage(apiToken, threadID, clientId)
+
                     return {
+                        "status":"success",
                         "message": final_message,
                         "request_tokens": request_tokens,
                         "reply_tokens": reply_tokens
                     }
+        return {"error": "Unknown error occurred"}
+            
+    def checkRemainingTokens(self, clientId):
+        return Client.objects.get(id=clientId).tkns_remaining
 
-    def num_tokens_from_messages(self, messages, model="gpt-3.5-turbo-0125"):
+    def getTokenCount(self, messages):
         """Returns the number of tokens used by a list of messages."""
         try:
+            model = current_app.config['OPENAI_MODEL']
             encoding = tiktoken.encoding_for_model(model)
         except KeyError:
             encoding = tiktoken.get_encoding("cl100k_base")
@@ -110,4 +143,7 @@ class OpenAIService:
             num_tokens += 2  # every reply is primed with <im_start>
             return num_tokens
         else:
-            raise NotImplementedError(f"""num_tokens_from_messages() is not presently implemented for model {model}.""")
+            raise NotImplementedError(f"""getTokenCount() is not presently implemented for model {model}.""")
+
+    
+
