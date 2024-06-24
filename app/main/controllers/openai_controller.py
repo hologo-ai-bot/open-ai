@@ -1,9 +1,8 @@
 from flask import Blueprint, jsonify, request, current_app
 from main.services.openai_service import OpenAIService
-from flask_socketio import SocketIO, emit, join_room, leave_room
 from main.models.client import Client
 
-openai_blueprint = Blueprint('convo', __name__)
+openai_blueprint = Blueprint('openai', __name__)
 
 openai_service = OpenAIService()
 
@@ -66,7 +65,7 @@ def convo():
         if not client:
             return jsonify({"error": "Client not found"}), 404
         
-        if (len(message) >=0 and client.tkns_remaining <= 8) or (len(message) >=16 and client.tkns_remaining <= 16) or (len(message) >= client.tkns_remaining ):
+        if  (len(message) >= client.tkns_remaining ) :
             return jsonify({"error": "Token limit exceeded"}), 402
         
         if message:
