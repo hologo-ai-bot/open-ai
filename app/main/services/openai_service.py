@@ -3,14 +3,53 @@ import time
 import tiktoken
 from flask import current_app
 from main.models.client import Client
+from threading import Thread, Lock
+from queue import Queue
 
 class OpenAIService:
 
+    def __init__(self):
+        self.locks = {}
+        self.queues = {}
+
+    def get_lock(self, clientId):
+        if clientId not in self.locks:
+            self.locks[clientId] = Lock()
+        return self.locks[clientId]
+
+    def get_queue(self, clientId):
+        if clientId not in self.queues:
+            self.queues[clientId] = Queue()
+           
+        return self.queues[clientId]
+
+    def worker(self, app, clientId):
+        with app.app_context():
+            queue = self.get_queue(clientId)
+           
+            while True:
+                task = queue.get()
+                if task is None:
+                    break
+                task()
+                queue.task_done()
+
+    def start_worker(self, app, clientId):
+        thread = Thread(target=self.worker, args=(app, clientId))
+        thread.daemon = True
+        thread.start()
+
     def updateTokenUsage(self, clientId, tkns_used):
-        client = Client.objects.get(id=clientId)
-        client.tkns_used += tkns_used
-        client.tkns_remaining -= tkns_used
-        client.save()
+        with self.get_lock(clientId):
+            client = Client.objects.get(id=clientId)
+            # print('--------------------')
+            # print(client.username)
+            # print(f'{client.tkns_remaining} - {tkns_used}')
+            client.tkns_used += tkns_used
+            client.tkns_remaining -= tkns_used
+            client.save() 
+            # print(f'= {client.tkns_remaining} ')
+            # print('--------------------')
 
     def createThread(self, apiToken):
         url = 'https://api.openai.com/v1/threads'
@@ -38,8 +77,7 @@ class OpenAIService:
         }
 
         num_tokens = self.getTokenCount([data])
-        self.updateTokenUsage(clientId,num_tokens)
-        print(f"No. of tokens in request: {num_tokens}")
+        self.updateTokenUsage(clientId, num_tokens)
 
         response = requests.post(url, headers=headers, json=data)
         return response.json(), num_tokens
@@ -67,7 +105,7 @@ class OpenAIService:
         response = requests.get(url, headers=headers)
         return response.json()['status']
 
-    def retriveMessage(self, apiToken, threadID, clientId):
+    def retrieveMessage(self, apiToken, threadID, clientId):
         url = f'https://api.openai.com/v1/threads/{threadID}/messages'
         headers = {
             'Content-Type': 'application/json',
@@ -75,53 +113,69 @@ class OpenAIService:
             'OpenAI-Beta': 'assistants=v2'
         }
         response = requests.get(url, headers=headers)
-        # print("response", response.json())
         reply_data = response.json()['data'][0]['content'][0]['text']['value']
         reply_tokens = self.getTokenCount([{"role": "assistant", "content": reply_data}])
         self.updateTokenUsage(clientId, reply_tokens)
-        print(f"No. of tokens in reply: {reply_tokens}")
         return reply_data, reply_tokens
 
-        # return response.json()['data'][0]['content'][0]['text']['value']
-
-    def connectAi(self,  message, clientId):
-        apiToken = current_app.config['OPENAI_API_TOKEN']
-        assistant_ID = current_app.config['ASSISTANT_ID']
-        client = Client.objects.get(id=clientId)
-        remaining_tkns = self.checkRemainingTokens(clientId)
-        msg_tkn = self.getTokenCount([ {
-            "role": "user",
-            "content": message
-        }])
-
-        if not client:
-            return {"error":"Unauthorized access"}
-
-        if (msg_tkn >= remaining_tkns) or (remaining_tkns < 20) :
-            return {"error":"Token limit exceeded"}
+    def process_request(self, apiToken, assistant_ID, message, clientId):
+        try:
+            threadID = self.createThread(apiToken)
+            if threadID:
+                _, request_tokens = self.sendMessageThread(apiToken, threadID, message, clientId)
+                runID = self.runThread(apiToken, threadID, assistant_ID)
+                if runID:
+                    status = ''
+                    while status != "completed":
+                        print(f"Current status: {status}. Checking again in 5 seconds...")
+                        time.sleep(5)
+                        status = self.checkRunStatus(apiToken, threadID, runID)
+                    if status == "completed":
+                        final_message, reply_tokens = self.retrieveMessage(apiToken, threadID, clientId)
+                        return {
+                            "message": final_message,
+                            "request_tokens": request_tokens,
+                            "reply_tokens": reply_tokens,
+                            "total_deducted": reply_tokens + request_tokens
+                        }
+        except Exception as e:
+            return {"error": str(e)}
         
-        # initial_version = client.version
-        threadID = self.createThread(apiToken)
-        if threadID:
-            _, request_tokens = self.sendMessageThread(apiToken, threadID, message, clientId)
-            runID = self.runThread(apiToken, threadID, assistant_ID)
-            if runID:
-                status = ''
-                while status != "completed":
-                    print(f"Current status: {status}. Checking again in 5 seconds...")
-                    time.sleep(5)
-                    status = self.checkRunStatus(apiToken, threadID, runID)
-                if status == "completed":
-                    final_message, reply_tokens = self.retriveMessage(apiToken, threadID, clientId)
 
-                    return {
-                        "status":"success",
-                        "message": final_message,
-                        "request_tokens": request_tokens,
-                        "reply_tokens": reply_tokens
-                    }
-        return {"error": "Unknown error occurred"}
+    def connectAi(self, message, clientId):
+        try:
+            remaining_tkns = self.checkRemainingTokens(clientId)
+            msg_tkn = self.getTokenCount([{"role": "user", "content": message}])
+
+            if (msg_tkn*2 >= remaining_tkns) or (remaining_tkns < 1000) :
+                return {"error": "Remaining tokens are too low. Please recharge to get replies"}
             
+            if remaining_tkns <= 0 :
+                return {"error": "Token limit reached"}
+            
+            app = current_app._get_current_object()
+            queue = self.get_queue(clientId)
+            if queue.empty():
+                self.start_worker(app, clientId)
+
+            result = []
+            def task():
+                result.append(self.process_request(
+                    
+                    current_app.config['OPENAI_API_TOKEN'],
+                    current_app.config['ASSISTANT_ID'],
+                    message,
+                    clientId
+                ))
+
+            queue.put(task)
+            queue.join()  # Wait for the task to be processed            
+        
+        except Client.DoesNotExist:
+            return {"error": "Unauthorized access"}
+        
+        return result[0] if result else {"error": "Unknown error occurred"}
+
     def checkRemainingTokens(self, clientId):
         return Client.objects.get(id=clientId).tkns_remaining
 
@@ -144,6 +198,3 @@ class OpenAIService:
             return num_tokens
         else:
             raise NotImplementedError(f"""getTokenCount() is not presently implemented for model {model}.""")
-
-    
-

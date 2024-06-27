@@ -1,5 +1,4 @@
 from flask import Blueprint, jsonify,  request
-from main.models.client import Client
 from main.services.client_service import ClientService
 
 client_blueprint = Blueprint('client', __name__)

@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request, current_app
 from main.services.openai_service import OpenAIService
-from main.models.client import Client
+from flask_socketio import SocketIO, emit, join_room, leave_room
 
 openai_blueprint = Blueprint('openai', __name__)
 
@@ -13,6 +13,7 @@ user_sessions = {}
 def index():
     return 'Open AI Controller Working'
 
+#web socket implementation
 def register_socketio_handlers(socketio):
     @socketio.on('connect')
     def handle_connect():
