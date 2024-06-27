@@ -66,6 +66,7 @@ def convo():
                 if response.get("error"):
                     return jsonify({"error": response["error"]}), 402       
                 else:
+                    # print("response :", response)
                     return jsonify(response), 200        
     except Exception as e:
         return jsonify({"error": str(e)}), 500

@@ -13,20 +13,21 @@ class OpenAIService:
         self.queues = {}
 
     def get_lock(self, clientId):
+        # print("get_lock")
         if clientId not in self.locks:
             self.locks[clientId] = Lock()
         return self.locks[clientId]
 
     def get_queue(self, clientId):
+        # print("get_queue")
         if clientId not in self.queues:
             self.queues[clientId] = Queue()
-           
         return self.queues[clientId]
 
     def worker(self, app, clientId):
+        # print("worker")
         with app.app_context():
             queue = self.get_queue(clientId)
-           
             while True:
                 task = queue.get()
                 if task is None:
@@ -35,23 +36,21 @@ class OpenAIService:
                 queue.task_done()
 
     def start_worker(self, app, clientId):
+        # print("start_worker")
         thread = Thread(target=self.worker, args=(app, clientId))
         thread.daemon = True
         thread.start()
 
     def updateTokenUsage(self, clientId, tkns_used):
+        # print("updateTokenUsage")
         with self.get_lock(clientId):
             client = Client.objects.get(id=clientId)
-            # print('--------------------')
-            # print(client.username)
-            # print(f'{client.tkns_remaining} - {tkns_used}')
             client.tkns_used += tkns_used
             client.tkns_remaining -= tkns_used
-            client.save() 
-            # print(f'= {client.tkns_remaining} ')
-            # print('--------------------')
+            client.save()
 
     def createThread(self, apiToken):
+        # print("createThread")
         url = 'https://api.openai.com/v1/threads'
         headers = {
             'Content-Type': 'application/json',
@@ -60,10 +59,10 @@ class OpenAIService:
         }
 
         response = requests.post(url, headers=headers)
-        print('response: ', response.json())
         return response.json()['id']
 
     def sendMessageThread(self, apiToken, threadID, message, clientId):
+        # print("sendMessageThread")
         url = f'https://api.openai.com/v1/threads/{threadID}/messages'
         headers = {
             'Content-Type': 'application/json',
@@ -83,6 +82,7 @@ class OpenAIService:
         return response.json(), num_tokens
 
     def runThread(self, apiToken, threadID, assistant_ID):
+        # print("runThread")
         url = f'https://api.openai.com/v1/threads/{threadID}/runs'
         headers = {
             'Content-Type': 'application/json',
@@ -96,6 +96,7 @@ class OpenAIService:
         return response.json()['id']
 
     def checkRunStatus(self, apiToken, threadID, runID):
+        # print("checkRunStatus")
         url = f'https://api.openai.com/v1/threads/{threadID}/runs/{runID}'
         headers = {
             'Content-Type': 'application/json',
@@ -106,6 +107,7 @@ class OpenAIService:
         return response.json()['status']
 
     def retrieveMessage(self, apiToken, threadID, clientId):
+        # print("retrieveMessage")
         url = f'https://api.openai.com/v1/threads/{threadID}/messages'
         headers = {
             'Content-Type': 'application/json',
@@ -120,6 +122,7 @@ class OpenAIService:
 
     def process_request(self, apiToken, assistant_ID, message, clientId):
         try:
+            # print("process_request")
             threadID = self.createThread(apiToken)
             if threadID:
                 _, request_tokens = self.sendMessageThread(apiToken, threadID, message, clientId)
@@ -140,41 +143,30 @@ class OpenAIService:
                         }
         except Exception as e:
             return {"error": str(e)}
-        
 
     def connectAi(self, message, clientId):
         try:
+            # print("connectAi")
+            print("req received : ", clientId, " - ", message)
             remaining_tkns = self.checkRemainingTokens(clientId)
             msg_tkn = self.getTokenCount([{"role": "user", "content": message}])
 
-            if (msg_tkn*2 >= remaining_tkns) or (remaining_tkns < 1000) :
+            if (msg_tkn * 2 >= remaining_tkns) or (remaining_tkns < 1000):
                 return {"error": "Remaining tokens are too low. Please recharge to get replies"}
-            
-            if remaining_tkns <= 0 :
+
+            if remaining_tkns <= 0:
                 return {"error": "Token limit reached"}
-            
-            app = current_app._get_current_object()
-            queue = self.get_queue(clientId)
-            if queue.empty():
-                self.start_worker(app, clientId)
 
-            result = []
-            def task():
-                result.append(self.process_request(
-                    
-                    current_app.config['OPENAI_API_TOKEN'],
-                    current_app.config['ASSISTANT_ID'],
-                    message,
-                    clientId
-                ))
+            result = self.process_request(
+                current_app.config['OPENAI_API_TOKEN'],
+                current_app.config['ASSISTANT_ID'],
+                message,
+                clientId
+            )
+            return result
 
-            queue.put(task)
-            queue.join()  # Wait for the task to be processed            
-        
         except Client.DoesNotExist:
             return {"error": "Unauthorized access"}
-        
-        return result[0] if result else {"error": "Unknown error occurred"}
 
     def checkRemainingTokens(self, clientId):
         return Client.objects.get(id=clientId).tkns_remaining
