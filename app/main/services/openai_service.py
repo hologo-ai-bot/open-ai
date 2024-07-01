@@ -3,14 +3,14 @@ import time
 import tiktoken
 from flask import current_app
 from main.models.client import Client
-from threading import Thread, Lock
-from queue import Queue
+from threading import  Lock
+# from queue import Queue
 
 class OpenAIService:
 
     def __init__(self):
         self.locks = {}
-        self.queues = {}
+        # self.queues = {}
 
     def get_lock(self, clientId):
         # print("get_lock")
@@ -18,28 +18,28 @@ class OpenAIService:
             self.locks[clientId] = Lock()
         return self.locks[clientId]
 
-    def get_queue(self, clientId):
-        # print("get_queue")
-        if clientId not in self.queues:
-            self.queues[clientId] = Queue()
-        return self.queues[clientId]
+    # def get_queue(self, clientId):
+    #     # print("get_queue")
+    #     if clientId not in self.queues:
+    #         self.queues[clientId] = Queue()
+    #     return self.queues[clientId]
 
-    def worker(self, app, clientId):
-        # print("worker")
-        with app.app_context():
-            queue = self.get_queue(clientId)
-            while True:
-                task = queue.get()
-                if task is None:
-                    break
-                task()
-                queue.task_done()
+    # def worker(self, app, clientId):
+    #     # print("worker")
+    #     with app.app_context():
+    #         queue = self.get_queue(clientId)
+    #         while True:
+    #             task = queue.get()
+    #             if task is None:
+    #                 break
+    #             task()
+    #             queue.task_done()
 
-    def start_worker(self, app, clientId):
-        # print("start_worker")
-        thread = Thread(target=self.worker, args=(app, clientId))
-        thread.daemon = True
-        thread.start()
+    # def start_worker(self, app, clientId):
+    #     # print("start_worker")
+    #     thread = Thread(target=self.worker, args=(app, clientId))
+    #     thread.daemon = True
+    #     thread.start()
 
     def updateTokenUsage(self, clientId, tkns_used):
         # print("updateTokenUsage")
@@ -146,7 +146,6 @@ class OpenAIService:
 
     def connectAi(self, message, clientId):
         try:
-            # print("connectAi")
             print("req received : ", clientId, " - ", message)
             remaining_tkns = self.checkRemainingTokens(clientId)
             msg_tkn = self.getTokenCount([{"role": "user", "content": message}])
@@ -156,6 +155,25 @@ class OpenAIService:
 
             if remaining_tkns <= 0:
                 return {"error": "Token limit reached"}
+
+            # app = current_app._get_current_object()
+            # queue = self.get_queue(clientId)
+            # if queue.empty():
+            #     self.start_worker(app, clientId)
+            # result = []
+            # def task():
+            #     result.append(self.process_request(
+                    
+            #         current_app.config['OPENAI_API_TOKEN'],
+            #         current_app.config['ASSISTANT_ID'],
+            #         message,
+            #         clientId
+            #     ))
+            #     print(result)
+            #     print("task added")
+                
+            # queue.put(task)
+            # queue.join() 
 
             result = self.process_request(
                 current_app.config['OPENAI_API_TOKEN'],
