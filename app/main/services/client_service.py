@@ -1,12 +1,12 @@
 from main.models.client import Client
-
+import bcrypt
 class ClientService:
     def clientRegister(self, username, email, password, first_name, last_name, tkns_remaining):
         try:
             client= Client(
             username=username,
             email=email,
-            password=password,
+            password=bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()) ,
             first_name=first_name,
             last_name=last_name,
             tkns_remaining=tkns_remaining
@@ -16,6 +16,16 @@ class ClientService:
         except Exception:
             return None
 
+    def clientLogin(self, email, password):
+        try:
+            client = Client.objects.get(email=email)
+            if bcrypt.checkpw(password.encode('utf-8'), client.password.encode('utf-8') ):
+                return True
+            else:
+                return False
+        except Client.DoesNotExist:
+            return None
+    
     def returnClient(self, username):
         try:
             client = Client.objects.get(username=username)

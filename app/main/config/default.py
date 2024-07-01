@@ -8,5 +8,5 @@ class Config:
     
     #DB config
     MONGODB_SETTINGS = {
-        'host': os.environ.get('DB_URI')
+        'host': 'mongodb://localhost:27017/openai'
     }

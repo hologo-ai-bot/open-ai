@@ -13,15 +13,13 @@ def create_app():
 
     # Loading configuration
     app.config.from_object(Config)
-    
-    # Initialize MongoDB
-    db.init_app(app)
 
     app.register_blueprint(openai_blueprint, url_prefix='/bot')
     app.register_blueprint(client_blueprint, url_prefix='/client')
 
+    # Initialize MongoDB
+    db.init_app(app)
     
-
     # socketio = SocketIO(app, cors_allowed_origins="*")
 
     return app

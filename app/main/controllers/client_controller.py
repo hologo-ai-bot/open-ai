@@ -30,6 +30,27 @@ def register():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@client_blueprint.route('/login', methods=['POST'])
+def login():
+    data = request.json
+    email = data.get('email')
+    password = data.get('password')    
+
+    if not email or not password :
+        return jsonify({"error": "Invalid data provided", }), 400
+    try:
+        response = client_service.clientLogin(email,password)
+
+        if response is not None:
+            if response:
+                return jsonify({"success": "login success"}), 200
+            else:
+                return jsonify({"error": "Invalid email or password"}), 401
+        else:
+            return jsonify({"error": "User doesn't exist"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500    
+
 @client_blueprint.route('/<username>', methods=['GET'])
 def get_user(username):
     try:
