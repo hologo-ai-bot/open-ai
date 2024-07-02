@@ -13,44 +13,33 @@ openai_service = OpenAIService()
 def index():
     return 'Open AI Controller Working'
 
+
 #web socket implementation
-# def register_socketio_handlers(socketio):
-#     @socketio.on('connect')
-#     def handle_connect():
-#         emit('message', {'data': 'Connected to the bot'})
+def register_socketio_handlers(socketio):
+    @socketio.on('connect')
+    def handle_connect():
+        # print('new client connection established')
+        emit('message', {'data': 'Connected to the bot'})
 
-#     @socketio.on('disconnect')
-#     def handle_disconnect():
-#         print('Client disconnected')
+    @socketio.on('disconnect')
+    def handle_disconnect():
+        print('Client disconnected')
 
-#     @socketio.on('join')
-#     def handle_join(data):
-#         room = data['room']
-#         join_room(room)
-#         emit('message', {'data': f'Joined room: {room}'}, room=room)
-
-#     @socketio.on('leave')
-#     def handle_leave(data):
-#         room = data['room']
-#         leave_room(room)
-#         emit('message', {'data': f'Left room: {room}'}, room=room)
-
-#     @socketio.on('message')
-#     def handle_message(data):
-#         room = data.get('room')
-#         message = data.get('message')
+    @socketio.on('message')
+    def handle_message(data):
+        # print('msg received ', data)
+        message = (data.get('message'))
+        # print(message)
+        clientId = data.get('client_id')
         
-#         if message:
-#             openai_tkn = current_app.config['OPENAI_API_TOKEN']
-#             assistant_id = current_app.config['ASSISTANT_ID']
-            
-#             response = openai_service.connectAi(openai_tkn, message, assistant_id)
-#             if response:
-#                 emit('response', response, room=room)
-#             else:
-#                 emit('response', {'error': 'No response from AI'}, room=room)
-#         else:
-#             emit('response', {'error': 'No message found'}, room=room)
+        if message:
+            response = openai_service.connectAi( message, clientId)
+            if response:
+                emit('response', response['message'])
+            else:
+                emit('response', {'error': 'No response from AI'})
+        else:
+            emit('response', {'error': 'No message found'})
 
 @openai_blueprint.route('/convo', methods=['POST'])
 def convo():

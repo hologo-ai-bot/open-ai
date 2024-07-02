@@ -181,6 +181,7 @@ class OpenAIService:
                 message,
                 clientId
             )
+            # print(result)
             return result
 
         except Client.DoesNotExist:

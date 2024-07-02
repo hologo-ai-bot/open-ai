@@ -1,12 +1,13 @@
 from flask import Flask
 from flask_mongoengine import MongoEngine
-# from flask_socketio import SocketIO
-from .controllers.openai_controller import openai_blueprint
+from flask_socketio import SocketIO
+from .controllers.openai_controller import openai_blueprint, register_socketio_handlers
 from .controllers.client_controller import client_blueprint 
 
 from .config import Config
 
 db = MongoEngine()
+socketio = SocketIO(cors_allowed_origins="*")
 
 def create_app():
     app = Flask(__name__)
@@ -20,6 +21,9 @@ def create_app():
     # Initialize MongoDB
     db.init_app(app)
     
-    # socketio = SocketIO(app, cors_allowed_origins="*")
+    register_socketio_handlers(socketio)
+    
+    socketio.init_app(app)
+
 
     return app
