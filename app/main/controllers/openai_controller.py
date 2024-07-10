@@ -18,7 +18,7 @@ def index():
 def register_socketio_handlers(socketio):
     @socketio.on('connect')
     def handle_connect():
-        # print('new client connection established')
+        print('new client connection established')
         emit('message', {'data': 'Connected to the bot'})
 
     @socketio.on('disconnect')
@@ -27,19 +27,23 @@ def register_socketio_handlers(socketio):
 
     @socketio.on('message')
     def handle_message(data):
-        # print('msg received ', data)
+        print('msg received ', data)
         message = (data.get('message'))
         # print(message)
         clientId = data.get('client_id')
-        
-        if message:
-            response = openai_service.connectAi( message, clientId)
-            if response:
-                emit('response', response['message'])
-            else:
-                emit('response', {'error': 'No response from AI'})
-        else:
-            emit('response', {'error': 'No message found'})
+
+        try:
+            if not clientId or message is None:
+                emit('response', "Something went wrong")
+            if message and clientId:
+                response = openai_service.connectAi( message, clientId)
+                if response.get("error"):
+                    emit('response', response['error'])
+                else:
+                    print('response', response)
+                    emit('response', response['message'])
+        except Exception as e:
+            emit('response', str(e))     
 
 @openai_blueprint.route('/convo', methods=['POST'])
 def convo():
@@ -51,7 +55,7 @@ def convo():
 
             if not clientId or message is None:
                 return jsonify({"error": "Invalid input data"}), 400
-            if message:
+            if message and clientId:
                 response = openai_service.connectAi(message, clientId)
                 if response.get("error"):
                     return jsonify({"error": response["error"]}), 402       

@@ -146,7 +146,7 @@ class OpenAIService:
 
     def connectAi(self, message, clientId):
         try:
-            print("req received : ", clientId, " - ", message)
+            # print("req received : ", clientId, " - ", message)
             remaining_tkns = self.checkRemainingTokens(clientId)
             msg_tkn = self.getTokenCount([{"role": "user", "content": message}])
 
