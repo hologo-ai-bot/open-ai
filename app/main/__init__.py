@@ -6,10 +6,13 @@ from .controllers.client_controller import client_blueprint
 
 from .config import Config
 
+from flask_cors import CORS
+
 db = MongoEngine()
 
 def create_app():
     app = Flask(__name__)
+    CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}})
 
     # Loading configuration
     app.config.from_object(Config)
@@ -19,8 +22,6 @@ def create_app():
 
     app.register_blueprint(openai_blueprint, url_prefix='/bot')
     app.register_blueprint(client_blueprint, url_prefix='/client')
-
-    
 
     # socketio = SocketIO(app, cors_allowed_origins="*")
 
